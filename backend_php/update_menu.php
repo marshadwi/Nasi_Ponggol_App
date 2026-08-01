@@ -8,8 +8,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $harga = $_POST['harga'] ?? 0;
     $kategori = $_POST['kategori'] ?? '';
     $rating = $_POST['rating'] ?? '5.0';
-    $image = $_POST['image'] ?? '';
-    $deskripsi = $_POST['deskripsi'] ?? 'Deskripsi menu belum tersedia.';
+    $image = $_POST['old_image'] ?? 'default.jpg';
+    if (isset($_FILES['image_file']) && $_FILES['image_file']['error'] == UPLOAD_ERR_OK) {
+        $uploadDir = 'uploads/menus/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
+        $filename = time() . '_' . basename($_FILES['image_file']['name']);
+        if (move_uploaded_file($_FILES['image_file']['tmp_name'], $uploadDir . $filename)) {
+            $image = $filename;
+        }
+    }
 
     try {
         $sql = "UPDATE menus SET nama = :nama, harga = :harga, kategori = :kategori, rating = :rating, image = :image, deskripsi = :deskripsi WHERE id = :id";

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import '../../config.dart';
 import '../../utils/app_styles.dart';
 
@@ -68,6 +70,9 @@ class _AdminMenusScreenState extends State<AdminMenusScreen> {
        kategori = 'Terlaris';
     }
     
+    File? selectedImage;
+    final ImagePicker picker = ImagePicker();
+    
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -86,7 +91,25 @@ class _AdminMenusScreenState extends State<AdminMenusScreen> {
                   decoration: const InputDecoration(labelText: 'Kategori'),
                 ),
                 TextField(controller: deskripsiCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Deskripsi')),
-                TextField(controller: imageCtrl, decoration: const InputDecoration(labelText: 'URL Gambar (Link Langsung)')),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(selectedImage != null ? 'Gambar dipilih' : (isEdit ? 'Gambar saat ini: ${menu['image']}' : 'Belum ada gambar')),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+                        if (image != null) {
+                          setStateDialog(() {
+                            selectedImage = File(image.path);
+                          });
+                        }
+                      },
+                      child: const Text('Pilih Gambar'),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -97,20 +120,35 @@ class _AdminMenusScreenState extends State<AdminMenusScreen> {
                 Navigator.pop(context);
                 setState(() => _isLoading = true);
                 final url = isEdit ? Config.updateMenuUrl : Config.addMenuUrl;
-                final body = {
-                  'nama': namaCtrl.text,
-                  'harga': hargaCtrl.text,
-                  'kategori': kategori,
-                  'rating': '5.0',
-                  'image': imageCtrl.text,
-                  'deskripsi': deskripsiCtrl.text,
-                };
-                if (isEdit) body['id'] = menu['id'].toString();
+                var request = http.MultipartRequest('POST', Uri.parse(url));
+                request.fields['nama'] = namaCtrl.text;
+                request.fields['harga'] = hargaCtrl.text;
+                request.fields['kategori'] = kategori;
+                request.fields['rating'] = '5.0';
+                request.fields['deskripsi'] = deskripsiCtrl.text;
+                
+                if (isEdit) {
+                  request.fields['id'] = menu['id'].toString();
+                  // Jika admin tidak memilih gambar baru, kirim nama gambar lama saja
+                  if (selectedImage == null) {
+                    request.fields['old_image'] = menu['image'];
+                  }
+                }
+                
+                if (selectedImage != null) {
+                  request.files.add(await http.MultipartFile.fromPath('image_file', selectedImage!.path));
+                }
                 
                 try {
-                  await http.post(Uri.parse(url), body: body);
-                  if (mounted) _fetchMenus();
+                  final response = await request.send();
+                  if (response.statusCode == 200) {
+                    if (mounted) _fetchMenus();
+                  } else {
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal menyimpan menu')));
+                  }
                 } catch (e) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Terjadi kesalahan jaringan')));
+                } finally {
                   if (mounted) setState(() => _isLoading = false);
                 }
               },
